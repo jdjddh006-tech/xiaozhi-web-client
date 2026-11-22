@@ -3,16 +3,17 @@ from flask_sock import Sock
 import os
 import uuid
 import asyncio
-import threading
-import websockets
 from dotenv import load_dotenv, set_key
 from proxy import WebSocketProxy
 
+OFFICIAL_WS = 'wss://api.tenclass.net/xiaozhi/v1/'
+RENDER_PROXY_WS = 'wss://://onrender.com'
+
 DEFAULT_CONFIG = {
-    'WS_URL': 'wss://api.tenclass.net/xiaozhi/v1/',
+    'WS_URL': OFFICIAL_WS,
     'DEVICE_TOKEN': '123',
     'ENABLE_TOKEN': 'true',
-    'LOCAL_PROXY_URL': 'wss://://onrender.com'
+    'LOCAL_PROXY_URL': RENDER_PROXY_WS
 }
 
 env_path = os.path.join(os.path.dirname(__file__), '.env')
@@ -30,8 +31,17 @@ def get_mac_address():
     mac = uuid.getnode()
     return ':'.join(['{:02x}'.format((mac >> elements) & 0xff) for elements in range(0, 8*6, 8)][::-1])
 
+def get_safe_urls():
+    load_dotenv(env_path, override=True)
+    ws_url = os.getenv("WS_URL", OFFICIAL_WS)
+    local_proxy = os.getenv("LOCAL_PROXY_URL", RENDER_PROXY_WS)
+    if "localhost" in ws_url or not ws_url.startswith("ws"):
+        ws_url = OFFICIAL_WS
+    if "localhost" in local_proxy or local_proxy == "wss://onrender.com":
+        local_proxy = RENDER_PROXY_WS
+    return ws_url, local_proxy
+
 class SyncToAsyncWS:
-    """將 flask-sock 同步連線橋接給原本的 async proxy"""
     def __init__(self, ws):
         self.ws = ws
         self.remote_address = "render-client"
@@ -51,29 +61,31 @@ class SyncToAsyncWS:
 
 @sock.route('/ws')
 def ws_proxy(ws):
-    load_dotenv(env_path, override=True)
     import proxy as proxy_mod
-    proxy_mod.WS_URL = os.getenv("WS_URL", DEFAULT_CONFIG['WS_URL'])
+    ws_url, _ = get_safe_urls()
+    proxy_mod.WS_URL = ws_url
     proxy_instance = WebSocketProxy()
     bridge_ws = SyncToAsyncWS(ws)
     asyncio.run(proxy_instance.proxy_handler(bridge_ws))
 
 @app.route('/')
 def index():
-    load_dotenv(env_path, override=True)
+    ws_url, local_proxy = get_safe_urls()
     return render_template('index.html',
                          device_id=get_mac_address(),
                          token=os.getenv("DEVICE_TOKEN", DEFAULT_CONFIG['DEVICE_TOKEN']),
                          enable_token=os.getenv("ENABLE_TOKEN", "true").lower() == 'true',
-                         ws_url=os.getenv("WS_URL", DEFAULT_CONFIG['WS_URL']),
-                         local_proxy_url=os.getenv("LOCAL_PROXY_URL", DEFAULT_CONFIG['LOCAL_PROXY_URL']))
+                         ws_url=ws_url,
+                         local_proxy_url=local_proxy)
 
 @app.route('/save_config', methods=['POST'])
 def save_config():
     try:
         data = request.get_json()
-        set_key(env_path, 'WS_URL', data.get('ws_url', DEFAULT_CONFIG['WS_URL']))
-        set_key(env_path, 'LOCAL_PROXY_URL', data.get('local_proxy_url', DEFAULT_CONFIG['LOCAL_PROXY_URL']))
+        new_ws = data.get('ws_url', OFFICIAL_WS)
+        new_proxy = data.get('local_proxy_url', RENDER_PROXY_WS)
+        set_key(env_path, 'WS_URL', new_ws)
+        set_key(env_path, 'LOCAL_PROXY_URL', new_proxy)
         set_key(env_path, 'DEVICE_TOKEN', data.get('token', ''))
         set_key(env_path, 'ENABLE_TOKEN', str(data.get('enable_token', False)).lower())
         load_dotenv(env_path, override=True)
