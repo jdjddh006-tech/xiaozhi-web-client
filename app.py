@@ -7,7 +7,7 @@ from dotenv import load_dotenv, set_key
 from proxy import WebSocketProxy
 
 OFFICIAL_WS = 'wss://api.tenclass.net/xiaozhi/v1/'
-RENDER_PROXY_WS = 'wss://://onrender.com'
+RENDER_PROXY_WS = 'wss://onrender.com'
 
 DEFAULT_CONFIG = {
     'WS_URL': OFFICIAL_WS,
