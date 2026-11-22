@@ -37,7 +37,7 @@ def get_safe_urls():
     local_proxy = os.getenv("LOCAL_PROXY_URL", RENDER_PROXY_WS)
     if "localhost" in ws_url or not ws_url.startswith("ws"):
         ws_url = OFFICIAL_WS
-    if "localhost" in local_proxy or local_proxy == "wss://onrender.com":
+    if "localhost" in local_proxy or "my-xiaozhi" not in local_proxy:
         local_proxy = RENDER_PROXY_WS
     return ws_url, local_proxy
 
